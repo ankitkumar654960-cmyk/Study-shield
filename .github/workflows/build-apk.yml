@@ -62,7 +62,13 @@ jobs:
             echo "Generated fallback debug.keystore."
           fi
 
-      - name: Build Debug APK
+        - name: Get Debug SHA-1
+        run: |
+          keytool -list -v \
+            -keystore debug.keystore \
+            -storepass android \
+            -alias androiddebugkey | grep SHA1    
+           - name: Build Debug APK
         run: |
           gradle --version
           gradle :app:assembleDebug --no-daemon --stacktrace
