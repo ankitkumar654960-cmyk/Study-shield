@@ -359,6 +359,12 @@ fun AuthScreen(
           modifier = Modifier.fillMaxWidth(),
           horizontalAlignment = Alignment.CenterHorizontally,
       ) {
+        var showEmailLogin by remember { mutableStateOf(false) }
+        var showMobileLogin by remember { mutableStateOf(false) }
+        var emailInput by remember { mutableStateOf("") }
+        var passwordInput by remember { mutableStateOf("") }
+        var mobileInput by remember { mutableStateOf("") }
+
         if (errorMessage != null) {
           Card(
               colors =
@@ -376,54 +382,198 @@ fun AuthScreen(
           }
         }
 
-        Button(
-            onClick = {
-              errorMessage = null
-              isLoading = true
-              onGoogleSignInClicked(
-                  context = context,
-                  credentialManager = credentialManager,
-                  onAuthSuccess = {
+        if (showMobileLogin) {
+          OutlinedTextField(
+              value = mobileInput,
+              onValueChange = { mobileInput = it.filter { ch -> ch.isDigit() }.take(15); errorMessage = null },
+              label = { Text("Mobile Number (10+ digits)") },
+              placeholder = { Text("9876543210") },
+              singleLine = true,
+              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+              modifier = Modifier.fillMaxWidth().testTag("mobile_input"),
+              shape = RoundedCornerShape(14.dp),
+          )
+          Spacer(modifier = Modifier.height(14.dp))
+          Button(
+              onClick = {
+                errorMessage = null
+                isLoading = true
+                val cleanPhone = mobileInput.trim()
+                if (cleanPhone.length < 10) {
+                  isLoading = false
+                  errorMessage = "Please enter a valid 10-digit mobile number."
+                  return@Button
+                }
+                val syntheticEmail = "$cleanPhone@studyshield.mobile"
+                val syntheticPassword = "shield_${cleanPhone}_secure"
+                scope.launch {
+                  try {
+                    try {
+                      Firebase.auth.signInWithEmailAndPassword(syntheticEmail, syntheticPassword).await()
+                    } catch (_: Exception) {
+                      Firebase.auth.createUserWithEmailAndPassword(syntheticEmail, syntheticPassword).await()
+                    }
                     isLoading = false
                     onAuthSuccess()
-                  },
-                  onAuthError = { msg ->
+                  } catch (e: Exception) {
                     isLoading = false
-                    errorMessage = msg
-                  },
-                  scope = scope,
-                  onAuthCancelled = {
-                    isLoading = false
-                    errorMessage = "Sign-in was cancelled. Tap below to continue with Google."
-                  },
+                    errorMessage = e.localizedMessage ?: "Mobile sign-in failed. Please try again."
+                  }
+                }
+              },
+              enabled = !isLoading,
+              modifier = Modifier.fillMaxWidth().height(52.dp).testTag("mobile_sign_in_button"),
+              shape = RoundedCornerShape(16.dp),
+          ) {
+            if (isLoading) {
+              CircularProgressIndicator(
+                  modifier = Modifier.size(20.dp),
+                  color = MaterialTheme.colorScheme.onPrimary,
+                  strokeWidth = 2.dp,
               )
-            },
-            enabled = !isLoading,
-            modifier = Modifier.fillMaxWidth().height(54.dp).testTag("google_sign_in_button"),
-            shape = RoundedCornerShape(16.dp),
-            colors =
-                ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
-        ) {
-          if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(22.dp),
-                color = MaterialTheme.colorScheme.onPrimary,
-                strokeWidth = 2.dp,
-            )
-          } else {
-            Icon(
-                imageVector = Icons.Filled.Security,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = "Continue with Google",
-                style = MaterialTheme.typography.labelLarge,
-            )
+            } else {
+              Text("Sign In with Mobile Number", style = MaterialTheme.typography.labelLarge)
+            }
+          }
+          Spacer(modifier = Modifier.height(6.dp))
+          TextButton(onClick = { showMobileLogin = false }) {
+            Text("Back to Google / Email Sign-In")
+          }
+        } else if (showEmailLogin) {
+          OutlinedTextField(
+              value = emailInput,
+              onValueChange = { emailInput = it; errorMessage = null },
+              label = { Text("Email Address") },
+              singleLine = true,
+              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+              modifier = Modifier.fillMaxWidth().testTag("email_input"),
+              shape = RoundedCornerShape(14.dp),
+          )
+          Spacer(modifier = Modifier.height(10.dp))
+          OutlinedTextField(
+              value = passwordInput,
+              onValueChange = { passwordInput = it; errorMessage = null },
+              label = { Text("Password (Min 6 chars)") },
+              singleLine = true,
+              visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+              modifier = Modifier.fillMaxWidth().testTag("password_input"),
+              shape = RoundedCornerShape(14.dp),
+          )
+          Spacer(modifier = Modifier.height(14.dp))
+          Button(
+              onClick = {
+                errorMessage = null
+                isLoading = true
+                val email = emailInput.trim()
+                val password = passwordInput.trim()
+                if (email.isBlank() || password.length < 6) {
+                  isLoading = false
+                  errorMessage = "Please enter a valid email and password (min 6 characters)."
+                  return@Button
+                }
+                scope.launch {
+                  try {
+                    try {
+                      Firebase.auth.signInWithEmailAndPassword(email, password).await()
+                    } catch (_: Exception) {
+                      Firebase.auth.createUserWithEmailAndPassword(email, password).await()
+                    }
+                    isLoading = false
+                    onAuthSuccess()
+                  } catch (e: Exception) {
+                    isLoading = false
+                    errorMessage = e.localizedMessage ?: "Authentication failed. Please check credentials."
+                  }
+                }
+              },
+              enabled = !isLoading,
+              modifier = Modifier.fillMaxWidth().height(52.dp).testTag("email_sign_in_button"),
+              shape = RoundedCornerShape(16.dp),
+          ) {
+            if (isLoading) {
+              CircularProgressIndicator(
+                  modifier = Modifier.size(20.dp),
+                  color = MaterialTheme.colorScheme.onPrimary,
+                  strokeWidth = 2.dp,
+              )
+            } else {
+              Text("Sign In or Register with Email", style = MaterialTheme.typography.labelLarge)
+            }
+          }
+          Spacer(modifier = Modifier.height(6.dp))
+          TextButton(onClick = { showEmailLogin = false }) {
+            Text("Prefer Google Sign-In")
+          }
+        } else {
+          Button(
+              onClick = {
+                errorMessage = null
+                isLoading = true
+                onGoogleSignInClicked(
+                    context = context,
+                    credentialManager = credentialManager,
+                    onAuthSuccess = {
+                      isLoading = false
+                      onAuthSuccess()
+                    },
+                    onAuthError = { msg ->
+                      isLoading = false
+                      errorMessage = msg
+                    },
+                    scope = scope,
+                    onAuthCancelled = {
+                      isLoading = false
+                      errorMessage = "Google Sign-In was cancelled. Try Mobile or Email below."
+                    },
+                )
+              },
+              enabled = !isLoading,
+              modifier = Modifier.fillMaxWidth().height(54.dp).testTag("google_sign_in_button"),
+              shape = RoundedCornerShape(16.dp),
+              colors =
+                  ButtonDefaults.buttonColors(
+                      containerColor = MaterialTheme.colorScheme.primary,
+                      contentColor = MaterialTheme.colorScheme.onPrimary,
+                  ),
+          ) {
+            if (isLoading) {
+              CircularProgressIndicator(
+                  modifier = Modifier.size(22.dp),
+                  color = MaterialTheme.colorScheme.onPrimary,
+                  strokeWidth = 2.dp,
+              )
+            } else {
+              Icon(
+                  imageVector = Icons.Filled.Security,
+                  contentDescription = null,
+                  modifier = Modifier.size(20.dp),
+              )
+              Spacer(modifier = Modifier.width(10.dp))
+              Text(
+                  text = "Continue with Google",
+                  style = MaterialTheme.typography.labelLarge,
+              )
+            }
+          }
+
+          Spacer(modifier = Modifier.height(6.dp))
+          Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceEvenly,
+          ) {
+            TextButton(
+                onClick = { showMobileLogin = true },
+                modifier = Modifier.testTag("toggle_mobile_login_button"),
+            ) {
+              Text("Sign In with Mobile")
+            }
+            TextButton(
+                onClick = { showEmailLogin = true },
+                modifier = Modifier.testTag("toggle_email_login_button"),
+            ) {
+              Text("Sign In with Email")
+            }
           }
         }
 
