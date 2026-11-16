@@ -70,7 +70,17 @@ import com.example.ui.screens.ProfileScreen
 import com.example.ui.theme.StudyShieldTheme
 import com.example.ui.viewmodel.StudyViewModel
 import com.example.ui.viewmodel.UiState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.auth
@@ -144,6 +154,37 @@ fun AppRoot(
     blockedAppFromIntent: String?,
     onClearBlockedIntent: () -> Unit,
 ) {
+  val context = LocalContext.current
+  val hasFirebaseApp = remember(context) { FirebaseApp.getApps(context).isNotEmpty() }
+  if (!hasFirebaseApp) {
+    Box(
+        modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+      Card {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          Text(
+              text = "Firebase Configuration Required",
+              style = MaterialTheme.typography.titleLarge,
+              textAlign = TextAlign.Center,
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          Text(
+              text =
+                  "This APK was built without app/google-services.json. Add GOOGLE_SERVICES_JSON to GitHub Repository Secrets and re-run the workflow to enable Google Sign-In and Cloud Sync.",
+              style = MaterialTheme.typography.bodyMedium,
+              textAlign = TextAlign.Center,
+          )
+        }
+      }
+    }
+    return
+  }
+
   val auth = remember { Firebase.auth }
   val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
   val user = currentUser
