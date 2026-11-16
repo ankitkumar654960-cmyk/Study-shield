@@ -60,8 +60,9 @@ jobs:
               -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 \
               -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
             echo "Generated fallback debug.keystore."
-           fi
-           - name: Build Debug APK
+          fi
+
+      - name: Build Debug APK
         run: |
           gradle --version
           gradle :app:assembleDebug --no-daemon --stacktrace
