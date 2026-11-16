@@ -1,0 +1,6 @@
+{
+  "name": "StudyShield",
+  "description": "Focused study tracker with Pomodoro timer, exam reminders, distraction blocking, analytics, XP leaderboards, and cloud sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

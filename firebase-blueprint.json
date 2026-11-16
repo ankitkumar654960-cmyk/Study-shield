@@ -1,0 +1,363 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Authenticated user's study preferences, goals, XP totals, and blocked app package list.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the profile owner."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Public display name shown on profile and leaderboard."
+        },
+        "avatarPreset": {
+          "type": "string",
+          "description": "Selected avatar style key."
+        },
+        "weeklyGoalMinutes": {
+          "type": "integer",
+          "description": "Weekly study target in minutes."
+        },
+        "pomodoroFocusMinutes": {
+          "type": "integer",
+          "description": "Default Pomodoro focus duration in minutes."
+        },
+        "pomodoroBreakMinutes": {
+          "type": "integer",
+          "description": "Default Pomodoro break duration in minutes."
+        },
+        "totalXp": {
+          "type": "integer",
+          "description": "Cumulative XP earned across all study sessions."
+        },
+        "weeklyXp": {
+          "type": "integer",
+          "description": "XP earned in the current week."
+        },
+        "streakDays": {
+          "type": "integer",
+          "description": "Current consecutive study days streak."
+        },
+        "blockedPackages": {
+          "type": "array",
+          "description": "List of Android package names blocked during Focus Shield mode."
+        },
+        "shareOnLeaderboard": {
+          "type": "boolean",
+          "description": "Whether the user's non-PII stats appear on the public leaderboard."
+        },
+        "twoFactorEnabled": {
+          "type": "boolean",
+          "description": "Whether TOTP two-factor verification is enabled."
+        },
+        "hasShieldPassword": {
+          "type": "boolean",
+          "description": "Whether a Focus Shield exit password has been configured."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp() on creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp() on update."
+        }
+      },
+      "required": [
+        "userId",
+        "displayName",
+        "avatarPreset",
+        "weeklyGoalMinutes",
+        "pomodoroFocusMinutes",
+        "pomodoroBreakMinutes",
+        "totalXp",
+        "weeklyXp",
+        "streakDays",
+        "blockedPackages",
+        "shareOnLeaderboard",
+        "twoFactorEnabled",
+        "hasShieldPassword",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserSecurityPii": {
+      "title": "User Private Contact and Security",
+      "description": "Owner-only PII and security secrets including contact email, phone number, TOTP secret, and hashed exit password.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner."
+        },
+        "email": {
+          "type": "string",
+          "description": "Contact or login email address."
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "Contact phone number for profile and 2FA recovery."
+        },
+        "totpSecret": {
+          "type": "string",
+          "description": "Base32 TOTP authenticator secret."
+        },
+        "shieldPasswordHash": {
+          "type": "string",
+          "description": "SHA-256 hash of the Focus Shield exit password."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "email",
+        "phoneNumber",
+        "totpSecret",
+        "shieldPasswordHash",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "StudySession": {
+      "title": "Study Session",
+      "description": "Completed Pomodoro or deep focus study session log.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the student."
+        },
+        "subject": {
+          "type": "string",
+          "description": "Subject or course name."
+        },
+        "durationMinutes": {
+          "type": "integer",
+          "description": "Duration of the session in minutes."
+        },
+        "xpEarned": {
+          "type": "integer",
+          "description": "XP awarded for this study session."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["pomodoro", "deep_focus", "manual"],
+          "description": "Timer or logging mode used."
+        },
+        "shieldEnabled": {
+          "type": "boolean",
+          "description": "Whether Distraction Shield was active during the session."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional study notes or topic summary."
+        },
+        "sessionDate": {
+          "type": "string",
+          "description": "ISO local date YYYY-MM-DD for analytics grouping."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "subject",
+        "durationMinutes",
+        "xpEarned",
+        "mode",
+        "shieldEnabled",
+        "notes",
+        "sessionDate",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ExamReminder": {
+      "title": "Exam Reminder",
+      "description": "Upcoming exam or academic deadline with local reminder scheduling metadata.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the student."
+        },
+        "title": {
+          "type": "string",
+          "description": "Exam or assignment title."
+        },
+        "subject": {
+          "type": "string",
+          "description": "Course or subject name."
+        },
+        "examDateMillis": {
+          "type": "integer",
+          "description": "UTC epoch milliseconds of the exam date/time."
+        },
+        "targetHours": {
+          "type": "integer",
+          "description": "Target preparation hours."
+        },
+        "completedHours": {
+          "type": "number",
+          "description": "Hours already studied for this exam."
+        },
+        "reminderMinutesBefore": {
+          "type": "integer",
+          "description": "Minutes before exam to fire local reminder notification."
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["high", "medium", "low"],
+          "description": "Priority level of the exam."
+        },
+        "completed": {
+          "type": "boolean",
+          "description": "Whether the exam is marked completed."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "title",
+        "subject",
+        "examDateMillis",
+        "targetHours",
+        "completedHours",
+        "reminderMinutesBefore",
+        "priority",
+        "completed",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "LeaderboardEntry": {
+      "title": "Leaderboard Entry",
+      "description": "Non-PII public gamification entry for friendly academic competition.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the participant."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Public display name."
+        },
+        "avatarPreset": {
+          "type": "string",
+          "description": "Avatar preset identifier."
+        },
+        "totalXp": {
+          "type": "integer",
+          "description": "Total cumulative XP."
+        },
+        "weeklyXp": {
+          "type": "integer",
+          "description": "XP earned this week."
+        },
+        "weeklyStudyMinutes": {
+          "type": "integer",
+          "description": "Study minutes logged this week."
+        },
+        "streakDays": {
+          "type": "integer",
+          "description": "Current study streak in days."
+        },
+        "level": {
+          "type": "integer",
+          "description": "Current scholar level."
+        },
+        "isPublic": {
+          "type": "boolean",
+          "description": "Whether this entry is visible on the leaderboard."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp set via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": [
+        "userId",
+        "displayName",
+        "avatarPreset",
+        "totalXp",
+        "weeklyXp",
+        "weeklyStudyMinutes",
+        "streakDays",
+        "level",
+        "isPublic",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Owner-only user profile and study configuration."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": {
+        "$ref": "#/entities/UserSecurityPii"
+      },
+      "description": "Owner-only private PII and 2FA/shield password metadata."
+    },
+    "/users/{userId}/study_sessions/{sessionId}": {
+      "schema": {
+        "$ref": "#/entities/StudySession"
+      },
+      "description": "Owner-scoped study session logs synced across devices."
+    },
+    "/users/{userId}/exams/{examId}": {
+      "schema": {
+        "$ref": "#/entities/ExamReminder"
+      },
+      "description": "Owner-scoped exam countdowns and reminders."
+    },
+    "/leaderboard/{userId}": {
+      "schema": {
+        "$ref": "#/entities/LeaderboardEntry"
+      },
+      "description": "Public non-PII leaderboard entries for XP and study rank."
+    }
+  }
+}

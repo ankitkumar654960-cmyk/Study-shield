@@ -1,0 +1,269 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Shared Security Primitives ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // --- Entity Validation Helpers ---
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 50 &&
+             data.avatarPreset is string && data.avatarPreset.size() >= 1 && data.avatarPreset.size() <= 30 &&
+             data.weeklyGoalMinutes is int && data.weeklyGoalMinutes >= 30 && data.weeklyGoalMinutes <= 5000 &&
+             data.pomodoroFocusMinutes is int && data.pomodoroFocusMinutes >= 5 && data.pomodoroFocusMinutes <= 120 &&
+             data.pomodoroBreakMinutes is int && data.pomodoroBreakMinutes >= 1 && data.pomodoroBreakMinutes <= 30 &&
+             data.totalXp is int && data.totalXp >= 0 && data.totalXp <= 10000000 &&
+             data.weeklyXp is int && data.weeklyXp >= 0 && data.weeklyXp <= 1000000 &&
+             data.streakDays is int && data.streakDays >= 0 && data.streakDays <= 3650 &&
+             data.blockedPackages is list && data.blockedPackages.size() <= 30 &&
+             (data.blockedPackages.size() == 0 || (data.blockedPackages[0] is string && data.blockedPackages[0].size() <= 120)) &&
+             data.shareOnLeaderboard is bool &&
+             data.twoFactorEnabled is bool &&
+             data.hasShieldPassword is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidUserSecurityPii(data) {
+      return data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.email is string && data.email.size() <= 120 &&
+             data.phoneNumber is string && data.phoneNumber.size() <= 30 &&
+             data.totpSecret is string && data.totpSecret.size() <= 64 &&
+             data.shieldPasswordHash is string && data.shieldPasswordHash.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidStudySession(data) {
+      return data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 60 &&
+             data.durationMinutes is int && data.durationMinutes >= 1 && data.durationMinutes <= 720 &&
+             data.xpEarned is int && data.xpEarned >= 0 && data.xpEarned <= 50000 &&
+             data.mode is string && data.mode in ['pomodoro', 'deep_focus', 'manual'] &&
+             data.shieldEnabled is bool &&
+             data.notes is string && data.notes.size() <= 300 &&
+             data.sessionDate is string && data.sessionDate.size() == 10 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidExamReminder(data) {
+      return data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 80 &&
+             data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 60 &&
+             data.examDateMillis is int && data.examDateMillis > 0 &&
+             data.targetHours is int && data.targetHours >= 1 && data.targetHours <= 500 &&
+             data.completedHours is number && data.completedHours >= 0 && data.completedHours <= 500 &&
+             data.reminderMinutesBefore is int && data.reminderMinutesBefore >= 0 && data.reminderMinutesBefore <= 10080 &&
+             data.priority is string && data.priority in ['high', 'medium', 'low'] &&
+             data.completed is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidLeaderboardEntry(data) {
+      return data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 50 &&
+             data.avatarPreset is string && data.avatarPreset.size() >= 1 && data.avatarPreset.size() <= 30 &&
+             data.totalXp is int && data.totalXp >= 0 && data.totalXp <= 10000000 &&
+             data.weeklyXp is int && data.weeklyXp >= 0 && data.weeklyXp <= 1000000 &&
+             data.weeklyStudyMinutes is int && data.weeklyStudyMinutes >= 0 && data.weeklyStudyMinutes <= 10080 &&
+             data.streakDays is int && data.streakDays >= 0 && data.streakDays <= 3650 &&
+             data.level is int && data.level >= 1 && data.level <= 100 &&
+             data.isPublic is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // --- 1. User Profiles (Strictly Owner-Only) ---
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'displayName', 'avatarPreset', 'weeklyGoalMinutes',
+                         'pomodoroFocusMinutes', 'pomodoroBreakMinutes', 'totalXp', 'weeklyXp',
+                         'streakDays', 'blockedPackages', 'shareOnLeaderboard',
+                         'twoFactorEnabled', 'hasShieldPassword', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'displayName', 'avatarPreset', 'weeklyGoalMinutes',
+                         'pomodoroFocusMinutes', 'pomodoroBreakMinutes', 'totalXp', 'weeklyXp',
+                         'streakDays', 'blockedPackages', 'shareOnLeaderboard',
+                         'twoFactorEnabled', 'hasShieldPassword', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isValidUserProfile(incoming()) &&
+                       isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'displayName', 'avatarPreset', 'weeklyGoalMinutes',
+                         'pomodoroFocusMinutes', 'pomodoroBreakMinutes', 'totalXp', 'weeklyXp',
+                         'streakDays', 'blockedPackages', 'shareOnLeaderboard',
+                         'twoFactorEnabled', 'hasShieldPassword', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // --- 2. Private Security & PII Subcollection (Strictly Owner-Only) ---
+      match /private/{docId} {
+        allow get: if isOwner(userId) && isValidId(docId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(docId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'email', 'phoneNumber', 'totpSecret',
+                           'shieldPasswordHash', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'email', 'phoneNumber', 'totpSecret',
+                           'shieldPasswordHash', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidUserSecurityPii(incoming());
+
+        allow update: if isValidUserSecurityPii(incoming()) &&
+                         isOwner(userId) &&
+                         isValidId(docId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'email', 'phoneNumber', 'totpSecret', 'shieldPasswordHash', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(docId);
+      }
+
+      // --- 3. Study Sessions Subcollection (Owner-Scoped) ---
+      match /study_sessions/{sessionId} {
+        allow get: if isOwner(userId) && isValidId(sessionId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(sessionId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'subject', 'durationMinutes', 'xpEarned',
+                           'mode', 'shieldEnabled', 'notes', 'sessionDate',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'subject', 'durationMinutes', 'xpEarned',
+                           'mode', 'shieldEnabled', 'notes', 'sessionDate',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidStudySession(incoming());
+
+        allow update: if isValidStudySession(incoming()) &&
+                         isOwner(userId) &&
+                         isValidId(sessionId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'subject', 'durationMinutes', 'xpEarned', 'mode',
+                           'shieldEnabled', 'notes', 'sessionDate', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(sessionId);
+      }
+
+      // --- 4. Exam Reminders Subcollection (Owner-Scoped) ---
+      match /exams/{examId} {
+        allow get: if isOwner(userId) && isValidId(examId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(examId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll([
+                           'userId', 'title', 'subject', 'examDateMillis',
+                           'targetHours', 'completedHours', 'reminderMinutesBefore',
+                           'priority', 'completed', 'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'title', 'subject', 'examDateMillis',
+                           'targetHours', 'completedHours', 'reminderMinutesBefore',
+                           'priority', 'completed', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isValidExamReminder(incoming());
+
+        allow update: if isValidExamReminder(incoming()) &&
+                         isOwner(userId) &&
+                         isValidId(examId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'subject', 'examDateMillis', 'targetHours',
+                           'completedHours', 'reminderMinutesBefore', 'priority',
+                           'completed', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(examId);
+      }
+    }
+
+    // --- 5. Leaderboard (Non-PII Public Stats, Owner-Write Only) ---
+    match /leaderboard/{entryUserId} {
+      allow get: if isSignedIn() && isValidId(entryUserId) &&
+                    (existing().isPublic == true || request.auth.uid == entryUserId);
+      allow list: if isSignedIn() && existing().isPublic == true;
+
+      allow create: if isOwner(entryUserId) &&
+                       isValidId(entryUserId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'displayName', 'avatarPreset', 'totalXp',
+                         'weeklyXp', 'weeklyStudyMinutes', 'streakDays',
+                         'level', 'isPublic', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'displayName', 'avatarPreset', 'totalXp',
+                         'weeklyXp', 'weeklyStudyMinutes', 'streakDays',
+                         'level', 'isPublic', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidLeaderboardEntry(incoming());
+
+      allow update: if isValidLeaderboardEntry(incoming()) &&
+                       isOwner(entryUserId) &&
+                       isValidId(entryUserId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'displayName', 'avatarPreset', 'totalXp', 'weeklyXp',
+                         'weeklyStudyMinutes', 'streakDays', 'level', 'isPublic', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(entryUserId) && isValidId(entryUserId);
+    }
+  }
+}
