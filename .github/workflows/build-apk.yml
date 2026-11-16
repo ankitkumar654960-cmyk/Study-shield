@@ -115,7 +115,7 @@ jobs:
 
       - name: Publish Direct APK to GitHub Releases
         uses: softprops/action-gh-release@v2
-        continue-on-error: type
+        continue-on-error: true
         with:
           tag_name: latest
           name: StudyShield Latest APK
