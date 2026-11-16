@@ -14,6 +14,7 @@ import com.example.data.model.UserProfile
 import com.example.data.model.UserSecurityPii
 import com.example.data.repository.StudyRepository
 import com.example.notifications.StudyNotificationHelper
+import com.example.service.StudyShieldMonitorService
 import com.example.util.SecurityUtils
 import com.google.firebase.firestore.FirebaseFirestoreException
 import java.text.SimpleDateFormat
@@ -293,6 +294,7 @@ class StudyViewModel(
             subject = current.subject,
             endEpochMs = endEpochMs,
         )
+        StudyShieldMonitorService.start(appContext)
       }
     }
 
@@ -341,6 +343,7 @@ class StudyViewModel(
 
   fun releaseShieldAndResetTimer() {
     timerJob?.cancel()
+    StudyShieldMonitorService.stop(appContext)
     viewModelScope.launch { prefsStore.setShieldActive(false) }
     val total = _pomodoroState.value.totalSeconds
     _pomodoroState.update {
@@ -353,6 +356,7 @@ class StudyViewModel(
 
   fun completeTimerSession(naturalFinish: Boolean) {
     timerJob?.cancel()
+    StudyShieldMonitorService.stop(appContext)
     val snapshot = _pomodoroState.value
     val elapsedSeconds = (snapshot.totalSeconds - snapshot.remainingSeconds).coerceAtLeast(60)
     val loggedMinutes =

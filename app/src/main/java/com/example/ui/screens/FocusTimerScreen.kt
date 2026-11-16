@@ -1,7 +1,9 @@
 package com.example.ui.screens
 
-import android.content.Intent
-import android.provider.Settings
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
@@ -64,7 +66,7 @@ import com.example.R
 import com.example.data.local.ShieldRuntimeState
 import com.example.data.model.DistractingAppCatalog
 import com.example.data.model.UserProfile
-import com.example.service.StudyShieldAccessibilityService
+import com.example.service.StudyShieldMonitorService
 import com.example.ui.components.CreateShieldPasswordDialog
 import com.example.ui.viewmodel.PomodoroPhase
 import com.example.ui.viewmodel.PomodoroTimerUiState
@@ -89,10 +91,19 @@ fun FocusTimerScreen(
     modifier: Modifier = Modifier,
 ) {
   val context = LocalContext.current
-  val isAccessibilityEnabled =
-      remember(shieldState.isShieldActive) {
-        StudyShieldAccessibilityService.isServiceEnabled(context)
+  val lifecycleOwner = LocalLifecycleOwner.current
+  var isUsageAccessGranted by remember {
+    mutableStateOf(StudyShieldMonitorService.isUsageAccessGranted(context))
+  }
+  DisposableEffect(lifecycleOwner, shieldState.isShieldActive) {
+    val observer = LifecycleEventObserver { _, event ->
+      if (event == Lifecycle.Event.ON_RESUME) {
+        isUsageAccessGranted = StudyShieldMonitorService.isUsageAccessGranted(context)
       }
+    }
+    lifecycleOwner.lifecycle.addObserver(observer)
+    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+  }
   var showCreatePwDialog by remember { mutableStateOf(false) }
   var customPkgInput by remember { mutableStateOf("") }
 
@@ -381,7 +392,7 @@ fun FocusTimerScreen(
 
           Surface(
               color =
-                  if (isAccessibilityEnabled) MaterialTheme.colorScheme.primaryContainer
+                  if (isUsageAccessGranted) MaterialTheme.colorScheme.primaryContainer
                   else MaterialTheme.colorScheme.secondaryContainer,
               shape = RoundedCornerShape(14.dp),
               modifier = Modifier.fillMaxWidth(),
@@ -394,32 +405,32 @@ fun FocusTimerScreen(
               Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                 Icon(
                     imageVector =
-                        if (isAccessibilityEnabled) Icons.Filled.CheckCircle
+                        if (isUsageAccessGranted) Icons.Filled.CheckCircle
                         else Icons.Filled.Warning,
                     contentDescription = null,
                     tint =
-                        if (isAccessibilityEnabled) MaterialTheme.colorScheme.primary
+                        if (isUsageAccessGranted) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.secondary,
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text =
-                        if (isAccessibilityEnabled)
-                            "Android Accessibility Shield is ACTIVE"
-                        else "Enable StudyShield Accessibility Service to block Instagram & YouTube system-wide",
+                        if (isUsageAccessGranted)
+                            "Focus Shield Usage Monitor is ACTIVE"
+                        else "Allow Usage Access to detect and block Instagram & YouTube during study sessions",
                     style = MaterialTheme.typography.bodyMedium,
                 )
               }
-              if (!isAccessibilityEnabled) {
+              if (!isUsageAccessGranted) {
                 OutlinedButton(
                     onClick = {
-                      context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                      StudyShieldMonitorService.openUsageAccessSettings(context)
                     },
-                    modifier = Modifier.testTag("enable_accessibility_button"),
+                    modifier = Modifier.testTag("enable_usage_access_button"),
                 ) {
                   Icon(Icons.Filled.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
                   Spacer(modifier = Modifier.width(4.dp))
-                  Text("Enable")
+                  Text("Allow")
                 }
               }
             }

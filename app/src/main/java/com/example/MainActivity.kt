@@ -56,7 +56,7 @@ import com.example.data.local.LocalPrefsStore
 import com.example.data.local.ThemePreference
 import com.example.data.repository.StudyRepository
 import com.example.notifications.StudyNotificationHelper
-import com.example.service.StudyShieldAccessibilityService
+import com.example.service.StudyShieldMonitorService
 import com.example.ui.auth.AuthScreen
 import com.example.ui.auth.TwoFactorVerificationScreen
 import com.example.ui.auth.signOutUser
@@ -110,7 +110,7 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     StudyNotificationHelper.ensureChannels(this)
-    blockedAppIntentState = intent?.getStringExtra(StudyShieldAccessibilityService.EXTRA_BLOCKED_PACKAGE)
+    blockedAppIntentState = intent?.getStringExtra(StudyShieldMonitorService.EXTRA_BLOCKED_PACKAGE)
 
     setContent {
       val prefsStore = remember { LocalPrefsStore(applicationContext) }
@@ -136,7 +136,7 @@ class MainActivity : ComponentActivity() {
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
-    val pkg = intent.getStringExtra(StudyShieldAccessibilityService.EXTRA_BLOCKED_PACKAGE)
+    val pkg = intent.getStringExtra(StudyShieldMonitorService.EXTRA_BLOCKED_PACKAGE)
     if (!pkg.isNullOrBlank()) {
       blockedAppIntentState = pkg
     }
