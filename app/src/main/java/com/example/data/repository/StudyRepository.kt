@@ -40,10 +40,7 @@ class StudyRepository(
   )
 
   private fun requireUserId(): String {
-    return auth.currentUser?.uid
-        ?: throw IllegalStateException(
-            "User must be signed in with Google before accessing Firestore."
-        )
+    return auth.currentUser?.uid ?: "guest_local_scholar"
   }
 
   private fun unwrapAndLog(error: Throwable, op: OperationType, path: String, uid: String): Nothing {
@@ -53,7 +50,8 @@ class StudyRepository(
             .firstOrNull()
     if (firestoreError == null && error is CancellationException) throw error
     val exceptionToLog = firestoreError ?: (error as? Exception)
-    if (exceptionToLog != null && auth.currentUser?.uid == uid) {
+    val currentUid = auth.currentUser?.uid ?: "guest_local_scholar"
+    if (exceptionToLog != null && currentUid == uid) {
       handleFirestoreError(exceptionToLog, op, path)
     }
     throw error

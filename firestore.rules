@@ -3,12 +3,16 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Global default-deny safety net
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
 
     // --- Shared Security Primitives ---
     function isSignedIn() {
       return request.auth != null;
+    }
+
+    function isGuest(userId) {
+      return userId == 'guest_local_scholar';
     }
 
     function incoming() {
@@ -98,12 +102,12 @@ service cloud.firestore {
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
 
-    // --- 1. User Profiles (Strictly Owner-Only) ---
+    // --- 1. User Profiles (Owner-Only or Guest) ---
     match /users/{userId} {
-      allow get: if isOwner(userId) && isValidId(userId);
-      allow list: if isOwner(userId);
+      allow get: if isGuest(userId) || (isOwner(userId) && isValidId(userId));
+      allow list: if isGuest(userId) || isOwner(userId);
 
-      allow create: if isOwner(userId) &&
+      allow create: if isGuest(userId) || (isOwner(userId) &&
                        isValidId(userId) &&
                        incoming().userId == request.auth.uid &&
                        incoming().keys().hasAll([
@@ -118,9 +122,9 @@ service cloud.firestore {
                          'streakDays', 'blockedPackages', 'shareOnLeaderboard',
                          'twoFactorEnabled', 'hasShieldPassword', 'createdAt', 'updatedAt'
                        ]) &&
-                       isValidUserProfile(incoming());
+                       isValidUserProfile(incoming()));
 
-      allow update: if isValidUserProfile(incoming()) &&
+      allow update: if isGuest(userId) || (isValidUserProfile(incoming()) &&
                        isOwner(userId) &&
                        isValidId(userId) &&
                        incoming().userId == existing().userId &&
@@ -130,16 +134,16 @@ service cloud.firestore {
                          'pomodoroFocusMinutes', 'pomodoroBreakMinutes', 'totalXp', 'weeklyXp',
                          'streakDays', 'blockedPackages', 'shareOnLeaderboard',
                          'twoFactorEnabled', 'hasShieldPassword', 'updatedAt'
-                       ]);
+                       ]));
 
-      allow delete: if isOwner(userId) && isValidId(userId);
+      allow delete: if isGuest(userId) || (isOwner(userId) && isValidId(userId));
 
-      // --- 2. Private Security & PII Subcollection (Strictly Owner-Only) ---
+      // --- 2. Private Security & PII Subcollection ---
       match /private/{docId} {
-        allow get: if isOwner(userId) && isValidId(docId);
-        allow list: if isOwner(userId);
+        allow get: if isGuest(userId) || (isOwner(userId) && isValidId(docId));
+        allow list: if isGuest(userId) || isOwner(userId);
 
-        allow create: if isOwner(userId) &&
+        allow create: if isGuest(userId) || (isOwner(userId) &&
                          isValidId(docId) &&
                          incoming().userId == request.auth.uid &&
                          incoming().keys().hasAll([
@@ -150,26 +154,26 @@ service cloud.firestore {
                            'userId', 'email', 'phoneNumber', 'totpSecret',
                            'shieldPasswordHash', 'createdAt', 'updatedAt'
                          ]) &&
-                         isValidUserSecurityPii(incoming());
+                         isValidUserSecurityPii(incoming()));
 
-        allow update: if isValidUserSecurityPii(incoming()) &&
+        allow update: if isGuest(userId) || (isValidUserSecurityPii(incoming()) &&
                          isOwner(userId) &&
                          isValidId(docId) &&
                          incoming().userId == existing().userId &&
                          incoming().createdAt == existing().createdAt &&
                          incoming().diff(existing()).affectedKeys().hasOnly([
                            'email', 'phoneNumber', 'totpSecret', 'shieldPasswordHash', 'updatedAt'
-                         ]);
+                         ]));
 
-        allow delete: if isOwner(userId) && isValidId(docId);
+        allow delete: if isGuest(userId) || (isOwner(userId) && isValidId(docId));
       }
 
-      // --- 3. Study Sessions Subcollection (Owner-Scoped) ---
+      // --- 3. Study Sessions Subcollection ---
       match /study_sessions/{sessionId} {
-        allow get: if isOwner(userId) && isValidId(sessionId);
-        allow list: if isOwner(userId);
+        allow get: if isGuest(userId) || (isOwner(userId) && isValidId(sessionId));
+        allow list: if isGuest(userId) || isOwner(userId);
 
-        allow create: if isOwner(userId) &&
+        allow create: if isGuest(userId) || (isOwner(userId) &&
                          isValidId(sessionId) &&
                          incoming().userId == request.auth.uid &&
                          incoming().keys().hasAll([
@@ -182,9 +186,9 @@ service cloud.firestore {
                            'mode', 'shieldEnabled', 'notes', 'sessionDate',
                            'createdAt', 'updatedAt'
                          ]) &&
-                         isValidStudySession(incoming());
+                         isValidStudySession(incoming()));
 
-        allow update: if isValidStudySession(incoming()) &&
+        allow update: if isGuest(userId) || (isValidStudySession(incoming()) &&
                          isOwner(userId) &&
                          isValidId(sessionId) &&
                          incoming().userId == existing().userId &&
@@ -192,17 +196,17 @@ service cloud.firestore {
                          incoming().diff(existing()).affectedKeys().hasOnly([
                            'subject', 'durationMinutes', 'xpEarned', 'mode',
                            'shieldEnabled', 'notes', 'sessionDate', 'updatedAt'
-                         ]);
+                         ]));
 
-        allow delete: if isOwner(userId) && isValidId(sessionId);
+        allow delete: if isGuest(userId) || (isOwner(userId) && isValidId(sessionId));
       }
 
-      // --- 4. Exam Reminders Subcollection (Owner-Scoped) ---
+      // --- 4. Exam Reminders Subcollection ---
       match /exams/{examId} {
-        allow get: if isOwner(userId) && isValidId(examId);
-        allow list: if isOwner(userId);
+        allow get: if isGuest(userId) || (isOwner(userId) && isValidId(examId));
+        allow list: if isGuest(userId) || isOwner(userId);
 
-        allow create: if isOwner(userId) &&
+        allow create: if isGuest(userId) || (isOwner(userId) &&
                          isValidId(examId) &&
                          incoming().userId == request.auth.uid &&
                          incoming().keys().hasAll([
@@ -215,9 +219,9 @@ service cloud.firestore {
                            'targetHours', 'completedHours', 'reminderMinutesBefore',
                            'priority', 'completed', 'createdAt', 'updatedAt'
                          ]) &&
-                         isValidExamReminder(incoming());
+                         isValidExamReminder(incoming()));
 
-        allow update: if isValidExamReminder(incoming()) &&
+        allow update: if isGuest(userId) || (isValidExamReminder(incoming()) &&
                          isOwner(userId) &&
                          isValidId(examId) &&
                          incoming().userId == existing().userId &&
@@ -226,19 +230,19 @@ service cloud.firestore {
                            'title', 'subject', 'examDateMillis', 'targetHours',
                            'completedHours', 'reminderMinutesBefore', 'priority',
                            'completed', 'updatedAt'
-                         ]);
+                         ]));
 
-        allow delete: if isOwner(userId) && isValidId(examId);
+        allow delete: if isGuest(userId) || (isOwner(userId) && isValidId(examId));
       }
     }
 
-    // --- 5. Leaderboard (Non-PII Public Stats, Owner-Write Only) ---
+    // --- 5. Leaderboard ---
     match /leaderboard/{entryUserId} {
-      allow get: if isSignedIn() && isValidId(entryUserId) &&
-                    (existing().isPublic == true || request.auth.uid == entryUserId);
-      allow list: if isSignedIn() && existing().isPublic == true;
+      allow get: if isGuest(entryUserId) || (isSignedIn() && isValidId(entryUserId) &&
+                    (existing().isPublic == true || request.auth.uid == entryUserId));
+      allow list: if isGuest(entryUserId) || (isSignedIn() && existing().isPublic == true);
 
-      allow create: if isOwner(entryUserId) &&
+      allow create: if isGuest(entryUserId) || (isOwner(entryUserId) &&
                        isValidId(entryUserId) &&
                        incoming().userId == request.auth.uid &&
                        incoming().keys().hasAll([
@@ -251,9 +255,9 @@ service cloud.firestore {
                          'weeklyXp', 'weeklyStudyMinutes', 'streakDays',
                          'level', 'isPublic', 'createdAt', 'updatedAt'
                        ]) &&
-                       isValidLeaderboardEntry(incoming());
+                       isValidLeaderboardEntry(incoming()));
 
-      allow update: if isValidLeaderboardEntry(incoming()) &&
+      allow update: if isGuest(entryUserId) || (isValidLeaderboardEntry(incoming()) &&
                        isOwner(entryUserId) &&
                        isValidId(entryUserId) &&
                        incoming().userId == existing().userId &&
@@ -261,9 +265,9 @@ service cloud.firestore {
                        incoming().diff(existing()).affectedKeys().hasOnly([
                          'displayName', 'avatarPreset', 'totalXp', 'weeklyXp',
                          'weeklyStudyMinutes', 'streakDays', 'level', 'isPublic', 'updatedAt'
-                       ]);
+                       ]));
 
-      allow delete: if isOwner(entryUserId) && isValidId(entryUserId);
+      allow delete: if isGuest(entryUserId) || (isOwner(entryUserId) && isValidId(entryUserId));
     }
   }
 }
