@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -66,7 +68,7 @@ import com.example.R
 import com.example.data.local.ShieldRuntimeState
 import com.example.data.model.DistractingAppCatalog
 import com.example.data.model.UserProfile
-import com.example.service.StudyShieldMonitorService
+import com.example.service.StudyShieldAccessibilityService
 import com.example.ui.components.CreateShieldPasswordDialog
 import com.example.ui.viewmodel.PomodoroPhase
 import com.example.ui.viewmodel.PomodoroTimerUiState
@@ -92,13 +94,13 @@ fun FocusTimerScreen(
 ) {
   val context = LocalContext.current
   val lifecycleOwner = LocalLifecycleOwner.current
-  var isUsageAccessGranted by remember {
-    mutableStateOf(StudyShieldMonitorService.isUsageAccessGranted(context))
+  var isAccessibilityEnabled by remember {
+    mutableStateOf(StudyShieldAccessibilityService.isServiceEnabled(context))
   }
   DisposableEffect(lifecycleOwner, shieldState.isShieldActive) {
     val observer = LifecycleEventObserver { _, event ->
       if (event == Lifecycle.Event.ON_RESUME) {
-        isUsageAccessGranted = StudyShieldMonitorService.isUsageAccessGranted(context)
+        isAccessibilityEnabled = StudyShieldAccessibilityService.isServiceEnabled(context)
       }
     }
     lifecycleOwner.lifecycle.addObserver(observer)
@@ -128,32 +130,56 @@ fun FocusTimerScreen(
       contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
-    // Mode Chips
+    // Mode Chips & Custom Time
     item {
       Text("Pomodoro & Focus Shield", style = MaterialTheme.typography.headlineMedium)
       Spacer(modifier = Modifier.height(10.dp))
-      Row(
-          modifier = Modifier.fillMaxWidth(),
+      FlowRow(
           horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalArrangement = Arrangement.spacedBy(6.dp),
       ) {
-        FilterChip(
-            selected = pomodoroState.phase == PomodoroPhase.FOCUS && pomodoroState.totalSeconds == 25 * 60,
-            onClick = { onSelectPhase(PomodoroPhase.FOCUS, 25) },
-            label = { Text("Pomodoro 25m") },
-            enabled = !pomodoroState.isRunning,
-        )
-        FilterChip(
-            selected = pomodoroState.phase == PomodoroPhase.FOCUS && pomodoroState.totalSeconds == 50 * 60,
-            onClick = { onSelectPhase(PomodoroPhase.FOCUS, 50) },
-            label = { Text("Deep 50m") },
-            enabled = !pomodoroState.isRunning,
-        )
+        listOf(15, 25, 30, 45, 50, 60).forEach { mins ->
+          FilterChip(
+              selected = pomodoroState.phase == PomodoroPhase.FOCUS && pomodoroState.totalSeconds == mins * 60,
+              onClick = { onSelectPhase(PomodoroPhase.FOCUS, mins) },
+              label = { Text("${mins}m") },
+              enabled = !pomodoroState.isRunning,
+          )
+        }
         FilterChip(
             selected = pomodoroState.phase == PomodoroPhase.SHORT_BREAK,
             onClick = { onSelectPhase(PomodoroPhase.SHORT_BREAK, null) },
             label = { Text("Break 5m") },
             enabled = !pomodoroState.isRunning,
         )
+      }
+      Spacer(modifier = Modifier.height(10.dp))
+      var customMinsInput by remember { mutableStateOf("") }
+      Row(
+          modifier = Modifier.fillMaxWidth(),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        OutlinedTextField(
+            value = customMinsInput,
+            onValueChange = { customMinsInput = it.filter { ch -> ch.isDigit() }.take(3) },
+            label = { Text("Custom Focus Minutes (1-120)") },
+            placeholder = { Text("e.g. 35") },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+            enabled = !pomodoroState.isRunning,
+        )
+        Button(
+            onClick = {
+              val m = customMinsInput.toIntOrNull() ?: 25
+              onSelectPhase(PomodoroPhase.FOCUS, m.coerceIn(1, 120))
+              customMinsInput = ""
+            },
+            enabled = !pomodoroState.isRunning && customMinsInput.isNotBlank(),
+            shape = RoundedCornerShape(12.dp),
+        ) {
+          Text("Set Custom")
+        }
       }
     }
 
@@ -392,7 +418,7 @@ fun FocusTimerScreen(
 
           Surface(
               color =
-                  if (isUsageAccessGranted) MaterialTheme.colorScheme.primaryContainer
+                  if (isAccessibilityEnabled) MaterialTheme.colorScheme.primaryContainer
                   else MaterialTheme.colorScheme.secondaryContainer,
               shape = RoundedCornerShape(14.dp),
               modifier = Modifier.fillMaxWidth(),
@@ -405,32 +431,32 @@ fun FocusTimerScreen(
               Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                 Icon(
                     imageVector =
-                        if (isUsageAccessGranted) Icons.Filled.CheckCircle
+                        if (isAccessibilityEnabled) Icons.Filled.CheckCircle
                         else Icons.Filled.Warning,
                     contentDescription = null,
                     tint =
-                        if (isUsageAccessGranted) MaterialTheme.colorScheme.primary
+                        if (isAccessibilityEnabled) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.secondary,
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text =
-                        if (isUsageAccessGranted)
-                            "Focus Shield Usage Monitor is ACTIVE"
-                        else "Allow Usage Access to detect and block Instagram & YouTube during study sessions",
+                        if (isAccessibilityEnabled)
+                            "StudyShield Accessibility Shield is ACTIVE"
+                        else "Enable Accessibility Service to instantly block Instagram & YouTube during focus",
                     style = MaterialTheme.typography.bodyMedium,
                 )
               }
-              if (!isUsageAccessGranted) {
+              if (!isAccessibilityEnabled) {
                 OutlinedButton(
                     onClick = {
-                      StudyShieldMonitorService.openUsageAccessSettings(context)
+                      context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     },
-                    modifier = Modifier.testTag("enable_usage_access_button"),
+                    modifier = Modifier.testTag("enable_accessibility_button"),
                 ) {
                   Icon(Icons.Filled.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
                   Spacer(modifier = Modifier.width(4.dp))
-                  Text("Allow")
+                  Text("Enable")
                 }
               }
             }

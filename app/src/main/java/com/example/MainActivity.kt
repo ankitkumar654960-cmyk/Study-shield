@@ -56,8 +56,9 @@ import com.example.data.local.LocalPrefsStore
 import com.example.data.local.ThemePreference
 import com.example.data.repository.StudyRepository
 import com.example.notifications.StudyNotificationHelper
-import com.example.service.StudyShieldMonitorService
+import com.example.service.StudyShieldAccessibilityService
 import com.example.ui.auth.AuthScreen
+import com.example.ui.auth.OnboardingProfileScreen
 import com.example.ui.auth.TwoFactorVerificationScreen
 import com.example.ui.auth.signOutUser
 import com.example.ui.components.BlockedAppInterceptDialog
@@ -110,7 +111,7 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     StudyNotificationHelper.ensureChannels(this)
-    blockedAppIntentState = intent?.getStringExtra(StudyShieldMonitorService.EXTRA_BLOCKED_PACKAGE)
+    blockedAppIntentState = intent?.getStringExtra(StudyShieldAccessibilityService.EXTRA_BLOCKED_PACKAGE)
 
     setContent {
       val prefsStore = remember { LocalPrefsStore(applicationContext) }
@@ -136,7 +137,7 @@ class MainActivity : ComponentActivity() {
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
-    val pkg = intent.getStringExtra(StudyShieldMonitorService.EXTRA_BLOCKED_PACKAGE)
+    val pkg = intent.getStringExtra(StudyShieldAccessibilityService.EXTRA_BLOCKED_PACKAGE)
     if (!pkg.isNullOrBlank()) {
       blockedAppIntentState = pkg
     }
@@ -262,6 +263,29 @@ fun AuthenticatedStudyApp(
   val profile = (profileState as? UiState.Success)?.data
   val pii = (securityPiiState as? UiState.Success)?.data
 
+  if (profile != null && profile.firstName.isBlank()) {
+    OnboardingProfileScreen(
+        initialEmail = userEmail,
+        initialDisplayName = userDisplayName,
+        onCompleteSetup = { firstName, lastName, dob, studentClass, subjects ->
+          viewModel.saveProfilePreferences(
+              displayName = "$firstName $lastName".trim(),
+              firstName = firstName,
+              lastName = lastName,
+              dateOfBirth = dob,
+              studentClass = studentClass,
+              avatarPreset = profile.avatarPreset,
+              weeklyGoalMinutes = profile.weeklyGoalMinutes,
+              pomodoroFocusMinutes = profile.pomodoroFocusMinutes,
+              pomodoroBreakMinutes = profile.pomodoroBreakMinutes,
+              blockedPackages = profile.blockedPackages,
+              shareOnLeaderboard = profile.shareOnLeaderboard,
+          )
+        },
+    )
+    return
+  }
+
   val needsTwoFactor =
       profile?.twoFactorEnabled == true &&
           !pii?.totpSecret.isNullOrBlank() &&
@@ -274,7 +298,7 @@ fun AuthenticatedStudyApp(
         totpSecret = pii?.totpSecret ?: "",
         onVerified = { viewModel.markTwoFactorVerifiedForSession() },
         onSignOut = {
-          signOutUser(credentialManager, scope)
+          signOutUser(context, credentialManager, scope)
         },
     )
     return
@@ -407,8 +431,8 @@ fun AuthenticatedStudyApp(
             StudyTab.EXAMS ->
                 ExamsScreen(
                     examsState = examsState,
-                    onCreateExam = { title, subj, millis, targetHrs, remMins, prio ->
-                      viewModel.createExamReminder(title, subj, millis, targetHrs, remMins, prio)
+                    onCreateExam = { title, subj, chapter, lectureName, lectureUrl, millis, targetHrs, remMins, prio ->
+                      viewModel.createExamReminder(title, subj, chapter, lectureName, lectureUrl, millis, targetHrs, remMins, prio)
                     },
                     onAddStudyHour = { exam -> viewModel.addExamStudyHour(exam) },
                     onToggleCompleted = { exam -> viewModel.toggleExamCompleted(exam) },
@@ -443,7 +467,7 @@ fun AuthenticatedStudyApp(
                       viewModel.saveSecuritySettings(email, phone, twoFa, secret, newPw)
                     },
                     onSignOut = {
-                      signOutUser(credentialManager, scope)
+                      signOutUser(context, credentialManager, scope)
                     },
                 )
           }

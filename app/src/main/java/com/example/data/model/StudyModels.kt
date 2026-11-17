@@ -10,6 +10,10 @@ data class UserProfile(
     @DocumentId val id: String = "",
     val userId: String = "",
     val displayName: String = "Scholar",
+    val firstName: String = "",
+    val lastName: String = "",
+    val dateOfBirth: String = "",
+    val studentClass: String = "JEE / NEET Aspirant",
     val avatarPreset: String = "owl",
     val weeklyGoalMinutes: Long = 600L,
     val pomodoroFocusMinutes: Long = 25L,
@@ -29,7 +33,17 @@ data class UserProfile(
         listOf(
             "com.instagram.android",
             "com.google.android.youtube",
+            "com.android.chrome",
         )
+
+    fun subjectsForClass(studentClass: String): List<String> {
+      return when {
+        studentClass.contains("JEE") -> listOf("Physics", "Chemistry", "Mathematics")
+        studentClass.contains("NEET") -> listOf("Physics", "Chemistry", "Biology")
+        studentClass.contains("1st") || studentClass.contains("5th") || studentClass.contains("10th") -> listOf("Mathematics", "Science", "English", "Social Science", "Hindi")
+        else -> listOf("Physics", "Chemistry", "Mathematics", "Biology", "English")
+      }
+    }
   }
 }
 
@@ -72,6 +86,9 @@ data class ExamReminder(
     val userId: String = "",
     val title: String = "",
     val subject: String = "",
+    val chapter: String = "",
+    val lectureName: String = "",
+    val lectureUrl: String = "",
     val examDateMillis: Long = 0L,
     val targetHours: Long = 10L,
     val completedHours: Double = 0.0,
@@ -115,16 +132,25 @@ object DistractingAppCatalog {
       listOf(
           DistractingAppCatalogItem("com.instagram.android", "Instagram", "Social"),
           DistractingAppCatalogItem("com.google.android.youtube", "YouTube", "Video"),
-          DistractingAppCatalogItem("com.zhiliaoapp.musically", "TikTok", "Short Video"),
+          DistractingAppCatalogItem("com.android.chrome", "Google Chrome", "Browser"),
+          DistractingAppCatalogItem("com.zhiliaoapp.musically", "TikTok / Shorts", "Short Video"),
           DistractingAppCatalogItem("com.snapchat.android", "Snapchat", "Messaging"),
+          DistractingAppCatalogItem("com.whatsapp", "WhatsApp", "Messaging"),
+          DistractingAppCatalogItem("org.telegram.messenger", "Telegram", "Messaging"),
           DistractingAppCatalogItem("com.twitter.android", "X (Twitter)", "Social"),
           DistractingAppCatalogItem("com.reddit.frontpage", "Reddit", "Forums"),
           DistractingAppCatalogItem("com.facebook.katana", "Facebook", "Social"),
-          DistractingAppCatalogItem("tv.twitch.android.app", "Twitch", "Streaming"),
+          DistractingAppCatalogItem("in.mohalla.sharechat", "ShareChat", "Social"),
+          DistractingAppCatalogItem("com.mxtech.videoplayer.ad", "MX Player", "Streaming"),
           DistractingAppCatalogItem("com.netflix.mediaclient", "Netflix", "Streaming"),
+          DistractingAppCatalogItem("tv.twitch.android.app", "Twitch", "Streaming"),
+          DistractingAppCatalogItem("com.dts.freefireth", "Free Fire", "Gaming"),
+          DistractingAppCatalogItem("com.pubg.imnewd", "BGMI / PUBG", "Gaming"),
+          DistractingAppCatalogItem("com.roblox.client", "Roblox", "Gaming"),
       )
 
   fun labelForPackage(packageName: String): String {
     return knownApps.firstOrNull { it.packageName == packageName }?.label ?: packageName
   }
 }
+

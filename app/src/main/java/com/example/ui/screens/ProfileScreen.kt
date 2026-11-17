@@ -56,6 +56,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import coil.compose.AsyncImage
 import com.example.data.local.ThemePreference
 import com.example.data.model.UserProfile
 import com.example.data.model.UserSecurityPii
@@ -95,6 +100,14 @@ fun ProfileScreen(
 
   var displayName by remember(profile?.displayName) { mutableStateOf(profile?.displayName ?: "Scholar") }
   var avatarPreset by remember(profile?.avatarPreset) { mutableStateOf(profile?.avatarPreset ?: "owl") }
+  val galleryLauncher =
+      rememberLauncherForActivityResult(
+          contract = ActivityResultContracts.PickVisualMedia()
+      ) { uri: Uri? ->
+        if (uri != null) {
+          avatarPreset = uri.toString()
+        }
+      }
   var weeklyGoalHours by
       remember(profile?.weeklyGoalMinutes) {
         mutableFloatStateOf(((profile?.weeklyGoalMinutes ?: 600L) / 60f).coerceIn(1f, 60f))
@@ -230,7 +243,7 @@ fun ProfileScreen(
               modifier = Modifier.fillMaxWidth().testTag("profile_name_input"),
           )
 
-          Text("Scholar Badge", style = MaterialTheme.typography.labelLarge)
+          Text("Scholar Badge or Custom Gallery Photo", style = MaterialTheme.typography.labelLarge)
           FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("owl" to "Owl", "fox" to "Fox", "phoenix" to "Phoenix", "compass" to "Compass")
                 .forEach { (id, label) ->
@@ -240,6 +253,37 @@ fun ProfileScreen(
                       label = { Text(label) },
                   )
                 }
+          }
+
+          OutlinedButton(
+              onClick = {
+                galleryLauncher.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+              },
+              modifier = Modifier.fillMaxWidth(),
+              shape = RoundedCornerShape(12.dp),
+          ) {
+            Icon(Icons.Filled.Person, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                if (avatarPreset.startsWith("content://") || avatarPreset.startsWith("file://") || avatarPreset.startsWith("http"))
+                  "Custom Gallery Photo Selected ✓"
+                else "Upload Photo from Gallery"
+            )
+          }
+
+          if (avatarPreset.startsWith("content://") || avatarPreset.startsWith("file://") || avatarPreset.startsWith("http")) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.size(64.dp),
+            ) {
+              AsyncImage(
+                  model = avatarPreset,
+                  contentDescription = "Custom profile photo",
+                  modifier = Modifier.fillMaxSize(),
+              )
+            }
           }
 
           Column {

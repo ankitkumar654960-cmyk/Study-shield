@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">StudyShield</string>
+    <string name="accessibility_service_description">StudyShield Focus Monitor detects when blocked distracting apps (such as Instagram or YouTube) are opened during an active study session and returns you to your StudyShield sanctuary.</string>
     <string name="shield_monitor_description">StudyShield Focus Monitor detects when blocked distracting apps (such as Instagram or YouTube) are opened during an active study session and returns you to your StudyShield sanctuary.</string>
     <string name="notification_channel_exams_name">Exam Reminders</string>
     <string name="notification_channel_exams_desc">Alerts for upcoming exams and study deadlines.</string>

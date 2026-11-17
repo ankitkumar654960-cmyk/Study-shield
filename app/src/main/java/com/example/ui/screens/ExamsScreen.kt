@@ -8,6 +8,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +27,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
@@ -48,7 +51,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,6 +63,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.example.data.model.ExamReminder
 import com.example.notifications.StudyNotificationHelper
+import com.example.ui.components.InAppStudyBrowserDialog
 import com.example.ui.viewmodel.UiState
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -73,6 +76,9 @@ fun ExamsScreen(
     onCreateExam: (
         title: String,
         subject: String,
+        chapter: String,
+        lectureName: String,
+        lectureUrl: String,
         examDateMillis: Long,
         targetHours: Long,
         reminderMinutesBefore: Long,
@@ -93,16 +99,26 @@ fun ExamsScreen(
       }
 
   var showAddDialog by remember { mutableStateOf(false) }
+  var activeBrowserUrl by remember { mutableStateOf<String?>(null) }
+  var activeBrowserTitle by remember { mutableStateOf("") }
+
+  if (activeBrowserUrl != null) {
+    InAppStudyBrowserDialog(
+        url = activeBrowserUrl ?: "",
+        title = activeBrowserTitle,
+        onDismiss = { activeBrowserUrl = null },
+    )
+  }
 
   if (showAddDialog) {
-    AddExamDialog(
+    AddTaskDialog(
         onDismiss = { showAddDialog = false },
-        onSave = { title, subject, daysOut, targetHours, reminderMins, priority ->
+        onSave = { title, subject, chapter, lectureName, lectureUrl, daysOut, targetHours, reminderMins, priority ->
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotifPermission) {
             notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
           }
           val examMillis = System.currentTimeMillis() + TimeUnit.DAYS.toMillis(daysOut.toLong())
-          onCreateExam(title, subject, examMillis, targetHours, reminderMins, priority)
+          onCreateExam(title, subject, chapter, lectureName, lectureUrl, examMillis, targetHours, reminderMins, priority)
           showAddDialog = false
         },
     )
@@ -123,45 +139,12 @@ fun ExamsScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
           Column {
-            Text("Exam Deadlines & Alerts", style = MaterialTheme.typography.headlineMedium)
+            Text("Study Tasks & Lectures", style = MaterialTheme.typography.headlineMedium)
             Text(
-                text = "Local notifications remind you before every exam.",
+                text = "Open YouTube & Chrome links directly inside StudyShield safely.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-          }
-        }
-      }
-
-      if (!hasNotifPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        item {
-          Card(
-              colors =
-                  CardDefaults.cardColors(
-                      containerColor = MaterialTheme.colorScheme.secondaryContainer
-                  ),
-              shape = RoundedCornerShape(16.dp),
-              modifier = Modifier.fillMaxWidth(),
-          ) {
-            Row(
-                modifier = Modifier.padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-              Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Filled.NotificationsActive, contentDescription = null)
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "Enable notifications to receive exam countdown alerts.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-              }
-              OutlinedButton(
-                  onClick = { notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
-              ) {
-                Text("Allow")
-              }
-            }
           }
         }
       }
@@ -214,10 +197,10 @@ fun ExamsScreen(
                       modifier = Modifier.size(40.dp),
                   )
                   Spacer(modifier = Modifier.height(10.dp))
-                  Text("No exams scheduled yet", style = MaterialTheme.typography.titleLarge)
+                  Text("No study tasks added yet", style = MaterialTheme.typography.titleLarge)
                   Spacer(modifier = Modifier.height(4.dp))
                   Text(
-                      text = "Tap + Add Exam to set target study hours and local reminders.",
+                      text = "Tap + Add task to attach lecture URLs and study notes.",
                       style = MaterialTheme.typography.bodyMedium,
                       color = MaterialTheme.colorScheme.onSurfaceVariant,
                   )
@@ -231,12 +214,9 @@ fun ExamsScreen(
                   onAddHour = { onAddStudyHour(exam) },
                   onToggleCompleted = { onToggleCompleted(exam) },
                   onDelete = { onDeleteExam(exam.id) },
-                  onPreviewAlert = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotifPermission) {
-                      notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                      onTriggerNotificationPreview(exam)
-                    }
+                  onOpenUrl = { url, title ->
+                    activeBrowserUrl = url
+                    activeBrowserTitle = title
                   },
               )
             }
@@ -251,7 +231,7 @@ fun ExamsScreen(
         containerColor = MaterialTheme.colorScheme.primary,
         contentColor = MaterialTheme.colorScheme.onPrimary,
     ) {
-      Icon(Icons.Filled.Add, contentDescription = "Add Exam Reminder")
+      Icon(Icons.Filled.Add, contentDescription = "Add Task")
     }
   }
 }
@@ -262,16 +242,25 @@ private fun ExamCard(
     onAddHour: () -> Unit,
     onToggleCompleted: () -> Unit,
     onDelete: () -> Unit,
-    onPreviewAlert: () -> Unit,
+    onOpenUrl: (String, String) -> Unit,
 ) {
-  val dateStr =
-      remember(exam.examDateMillis) {
-        SimpleDateFormat("EEE, MMM d", Locale.US).format(Date(exam.examDateMillis))
-      }
-  val daysLeft =
-      TimeUnit.MILLISECONDS.toDays((exam.examDateMillis - System.currentTimeMillis()).coerceAtLeast(0L))
   val progress =
       (exam.completedHours.toFloat() / exam.targetHours.coerceAtLeast(1L).toFloat()).coerceIn(0f, 1f)
+
+  val subtitleFormat = buildString {
+    if (exam.subject.isNotBlank()) append(exam.subject)
+    if (exam.chapter.isNotBlank()) {
+      if (isNotEmpty()) append(" · ")
+      append(exam.chapter)
+    }
+    if (exam.lectureName.isNotBlank()) {
+      if (isNotEmpty()) append(" · ")
+      append(exam.lectureName)
+    }
+    if (isEmpty()) {
+      append("General Study")
+    }
+  }
 
   Card(
       shape = RoundedCornerShape(20.dp),
@@ -296,7 +285,7 @@ private fun ExamCard(
                 imageVector =
                     if (exam.completed) Icons.Filled.CheckCircle
                     else Icons.Outlined.RadioButtonUnchecked,
-                contentDescription = "Toggle Exam Completed",
+                contentDescription = "Toggle Task Completed",
                 tint =
                     if (exam.completed) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -312,26 +301,11 @@ private fun ExamCard(
                     ),
             )
             Text(
-                text = "${exam.subject} • $dateStr (${daysLeft}d left)",
+                text = subtitleFormat,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
           }
-        }
-        Surface(
-            color =
-                when (exam.priority) {
-                  ExamReminder.PRIORITY_HIGH -> MaterialTheme.colorScheme.errorContainer
-                  ExamReminder.PRIORITY_MEDIUM -> MaterialTheme.colorScheme.secondaryContainer
-                  else -> MaterialTheme.colorScheme.tertiaryContainer
-                },
-            shape = RoundedCornerShape(8.dp),
-        ) {
-          Text(
-              text = exam.priority.uppercase(),
-              style = MaterialTheme.typography.labelSmall,
-              modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-          )
         }
       }
 
@@ -345,11 +319,16 @@ private fun ExamCard(
                   "Prep: ${String.format(Locale.US, "%.1f", exam.completedHours)}h / ${exam.targetHours}h",
               style = MaterialTheme.typography.labelMedium,
           )
-          Text(
-              text = "Alert ${exam.reminderMinutesBefore}m prior",
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
+          if (exam.lectureUrl.isNotBlank()) {
+            TextButton(
+                onClick = { onOpenUrl(exam.lectureUrl, exam.title) },
+                contentPadding = PaddingValues(0.dp),
+            ) {
+              Icon(Icons.Filled.Language, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Open In-App Link")
+            }
+          }
         }
         Spacer(modifier = Modifier.height(6.dp))
         LinearProgressIndicator(
@@ -366,33 +345,28 @@ private fun ExamCard(
         FilledTonalButton(onClick = onAddHour, enabled = !exam.completed) {
           Text("+1h Studied")
         }
-        Row {
-          IconButton(onClick = onPreviewAlert) {
-            Icon(
-                Icons.Filled.NotificationsActive,
-                contentDescription = "Test Exam Reminder Notification",
-                tint = MaterialTheme.colorScheme.primary,
-            )
-          }
-          IconButton(onClick = onDelete) {
-            Icon(
-                Icons.Filled.Delete,
-                contentDescription = "Delete Exam",
-                tint = MaterialTheme.colorScheme.error,
-            )
-          }
+        IconButton(onClick = onDelete) {
+          Icon(
+              Icons.Filled.Delete,
+              contentDescription = "Delete Task",
+              tint = MaterialTheme.colorScheme.error,
+          )
         }
       }
     }
   }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AddExamDialog(
+private fun AddTaskDialog(
     onDismiss: () -> Unit,
     onSave: (
         title: String,
         subject: String,
+        chapter: String,
+        lectureName: String,
+        lectureUrl: String,
         daysOut: Int,
         targetHours: Long,
         reminderMins: Long,
@@ -400,41 +374,69 @@ private fun AddExamDialog(
     ) -> Unit,
 ) {
   var title by remember { mutableStateOf("") }
-  var subject by remember { mutableStateOf("") }
-  var daysOutSlider by remember { mutableFloatStateOf(7f) }
-  var targetHoursSlider by remember { mutableFloatStateOf(12f) }
-  var reminderMinutes by remember { mutableLongStateOf(120L) }
-  var priority by remember { mutableStateOf(ExamReminder.PRIORITY_HIGH) }
+  var selectedSubject by remember { mutableStateOf("Physics") }
+  var chapter by remember { mutableStateOf("") }
+  var lectureName by remember { mutableStateOf("") }
+  var lectureUrl by remember { mutableStateOf("") }
+  var targetHoursSlider by remember { mutableFloatStateOf(10f) }
+
+  val subjects = listOf("Physics", "Mathematics", "Chemistry", "Biology", "Computer Science", "Literature")
 
   AlertDialog(
       onDismissRequest = onDismiss,
-      title = { Text("New Exam Reminder") },
+      title = { Text("Add task + optional lecture link") },
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
           OutlinedTextField(
               value = title,
               onValueChange = { title = it },
-              label = { Text("Exam Title") },
-              placeholder = { Text("e.g., Linear Algebra Midterm") },
+              label = { Text("Task title") },
+              placeholder = { Text("e.g. Watch Physics lecture 04") },
               singleLine = true,
-              modifier = Modifier.fillMaxWidth().testTag("exam_title_input"),
+              modifier = Modifier.fillMaxWidth().testTag("task_title_input"),
           )
-          OutlinedTextField(
-              value = subject,
-              onValueChange = { subject = it },
-              label = { Text("Subject") },
-              placeholder = { Text("e.g., Mathematics") },
-              singleLine = true,
-              modifier = Modifier.fillMaxWidth().testTag("exam_subject_input"),
-          )
-          Column {
-            Text("Exam in ${daysOutSlider.toInt()} days", style = MaterialTheme.typography.labelLarge)
-            Slider(
-                value = daysOutSlider,
-                onValueChange = { daysOutSlider = it },
-                valueRange = 1f..60f,
-            )
+
+          Text("Subject", style = MaterialTheme.typography.labelLarge)
+          FlowRow(
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+              verticalArrangement = Arrangement.spacedBy(4.dp),
+          ) {
+            subjects.forEach { subj ->
+              FilterChip(
+                  selected = selectedSubject == subj,
+                  onClick = { selectedSubject = subj },
+                  label = { Text(subj) },
+              )
+            }
           }
+
+          OutlinedTextField(
+              value = chapter,
+              onValueChange = { chapter = it },
+              label = { Text("Chapter") },
+              placeholder = { Text("e.g. Motion in a Straight Line") },
+              singleLine = true,
+              modifier = Modifier.fillMaxWidth(),
+          )
+
+          OutlinedTextField(
+              value = lectureName,
+              onValueChange = { lectureName = it },
+              label = { Text("Lecture number / name") },
+              placeholder = { Text("e.g. Lecture 04") },
+              singleLine = true,
+              modifier = Modifier.fillMaxWidth(),
+          )
+
+          OutlinedTextField(
+              value = lectureUrl,
+              onValueChange = { lectureUrl = it },
+              label = { Text("Direct lecture URL (optional)") },
+              placeholder = { Text("https://youtube.com/... or https://...") },
+              singleLine = true,
+              modifier = Modifier.fillMaxWidth(),
+          )
+
           Column {
             Text(
                 "Target Prep: ${targetHoursSlider.toInt()} hours",
@@ -443,33 +445,8 @@ private fun AddExamDialog(
             Slider(
                 value = targetHoursSlider,
                 onValueChange = { targetHoursSlider = it },
-                valueRange = 2f..60f,
+                valueRange = 1f..50f,
             )
-          }
-          Text("Priority", style = MaterialTheme.typography.labelLarge)
-          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(
-                    ExamReminder.PRIORITY_HIGH to "High",
-                    ExamReminder.PRIORITY_MEDIUM to "Medium",
-                    ExamReminder.PRIORITY_LOW to "Low",
-                )
-                .forEach { (key, label) ->
-                  FilterChip(
-                      selected = priority == key,
-                      onClick = { priority = key },
-                      label = { Text(label) },
-                  )
-                }
-          }
-          Text("Reminder Lead Time", style = MaterialTheme.typography.labelLarge)
-          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(30L to "30m", 120L to "2h", 1440L to "1d").forEach { (mins, label) ->
-              FilterChip(
-                  selected = reminderMinutes == mins,
-                  onClick = { reminderMinutes = mins },
-                  label = { Text(label) },
-              )
-            }
           }
         }
       },
@@ -477,17 +454,20 @@ private fun AddExamDialog(
         Button(
             onClick = {
               onSave(
-                  title.ifBlank { "Upcoming Exam" },
-                  subject.ifBlank { "General" },
-                  daysOutSlider.toInt(),
+                  title.ifBlank { "Watch Lecture" },
+                  selectedSubject,
+                  chapter.ifBlank { "General Chapter" },
+                  lectureName.ifBlank { "Lecture 01" },
+                  lectureUrl.trim(),
+                  14,
                   targetHoursSlider.toLong(),
-                  reminderMinutes,
-                  priority,
+                  120L,
+                  ExamReminder.PRIORITY_HIGH,
               )
             },
             modifier = Modifier.testTag("save_exam_button"),
         ) {
-          Text("Schedule")
+          Text("+ Add task")
         }
       },
       dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },

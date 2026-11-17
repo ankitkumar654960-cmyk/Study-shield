@@ -36,10 +36,18 @@ object StudyNotificationHelper {
           NotificationChannel(
                   CHANNEL_TIMER,
                   context.getString(R.string.notification_channel_timer_name),
-                  NotificationManager.IMPORTANCE_DEFAULT,
+                  NotificationManager.IMPORTANCE_HIGH,
               )
               .apply {
                 description = context.getString(R.string.notification_channel_timer_desc)
+                enableVibration(true)
+                setSound(
+                    android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
               }
       manager.createNotificationChannel(examChannel)
       manager.createNotificationChannel(timerChannel)
@@ -84,6 +92,7 @@ object StudyNotificationHelper {
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()

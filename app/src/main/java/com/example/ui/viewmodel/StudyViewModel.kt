@@ -14,7 +14,7 @@ import com.example.data.model.UserProfile
 import com.example.data.model.UserSecurityPii
 import com.example.data.repository.StudyRepository
 import com.example.notifications.StudyNotificationHelper
-import com.example.service.StudyShieldMonitorService
+
 import com.example.util.SecurityUtils
 import com.google.firebase.firestore.FirebaseFirestoreException
 import java.text.SimpleDateFormat
@@ -294,7 +294,6 @@ class StudyViewModel(
             subject = current.subject,
             endEpochMs = endEpochMs,
         )
-        StudyShieldMonitorService.start(appContext)
       }
     }
 
@@ -343,7 +342,6 @@ class StudyViewModel(
 
   fun releaseShieldAndResetTimer() {
     timerJob?.cancel()
-    StudyShieldMonitorService.stop(appContext)
     viewModelScope.launch { prefsStore.setShieldActive(false) }
     val total = _pomodoroState.value.totalSeconds
     _pomodoroState.update {
@@ -356,7 +354,6 @@ class StudyViewModel(
 
   fun completeTimerSession(naturalFinish: Boolean) {
     timerJob?.cancel()
-    StudyShieldMonitorService.stop(appContext)
     val snapshot = _pomodoroState.value
     val elapsedSeconds = (snapshot.totalSeconds - snapshot.remainingSeconds).coerceAtLeast(60)
     val loggedMinutes =
@@ -465,6 +462,9 @@ class StudyViewModel(
   fun createExamReminder(
       title: String,
       subject: String,
+      chapter: String,
+      lectureName: String,
+      lectureUrl: String,
       examDateMillis: Long,
       targetHours: Long,
       reminderMinutesBefore: Long,
@@ -475,6 +475,9 @@ class StudyViewModel(
           repository.createExam(
               title = title,
               subject = subject,
+              chapter = chapter,
+              lectureName = lectureName,
+              lectureUrl = lectureUrl,
               examDateMillis = examDateMillis,
               targetHours = targetHours,
               reminderMinutesBefore = reminderMinutesBefore,
@@ -489,10 +492,10 @@ class StudyViewModel(
             subject = subject,
             triggerAtMillis = triggerAt,
         )
-        _actionStatus.value = "Exam reminder scheduled!"
+        _actionStatus.value = "Task saved & scheduled successfully!"
       }
       result.onFailure { err ->
-        _actionStatus.value = "Could not save exam: ${err.localizedMessage}"
+        _actionStatus.value = "Could not save task: ${err.localizedMessage}"
       }
     }
   }
@@ -571,6 +574,10 @@ class StudyViewModel(
 
   fun saveProfilePreferences(
       displayName: String,
+      firstName: String,
+      lastName: String,
+      dateOfBirth: String,
+      studentClass: String,
       avatarPreset: String,
       weeklyGoalMinutes: Long,
       pomodoroFocusMinutes: Long,
@@ -583,6 +590,10 @@ class StudyViewModel(
       val result =
           repository.updateProfilePreferences(
               displayName = displayName,
+              firstName = firstName,
+              lastName = lastName,
+              dateOfBirth = dateOfBirth,
+              studentClass = studentClass,
               avatarPreset = avatarPreset,
               weeklyGoalMinutes = weeklyGoalMinutes,
               pomodoroFocusMinutes = pomodoroFocusMinutes,
@@ -594,6 +605,31 @@ class StudyViewModel(
           if (result.isSuccess) "Profile preferences saved & synced."
           else "Save failed: ${result.exceptionOrNull()?.localizedMessage}"
     }
+  }
+
+  fun saveProfilePreferences(
+      displayName: String,
+      avatarPreset: String,
+      weeklyGoalMinutes: Long,
+      pomodoroFocusMinutes: Long,
+      pomodoroBreakMinutes: Long,
+      blockedPackages: List<String>,
+      shareOnLeaderboard: Boolean,
+  ) {
+    val currentProfile = (profileState.value as? UiState.Success)?.data
+    saveProfilePreferences(
+        displayName = displayName,
+        firstName = currentProfile?.firstName ?: "Scholar",
+        lastName = currentProfile?.lastName ?: "",
+        dateOfBirth = currentProfile?.dateOfBirth ?: "2008-05-15",
+        studentClass = currentProfile?.studentClass ?: "JEE Aspirant",
+        avatarPreset = avatarPreset,
+        weeklyGoalMinutes = weeklyGoalMinutes,
+        pomodoroFocusMinutes = pomodoroFocusMinutes,
+        pomodoroBreakMinutes = pomodoroBreakMinutes,
+        blockedPackages = blockedPackages,
+        shareOnLeaderboard = shareOnLeaderboard,
+    )
   }
 
   fun saveSecuritySettings(

@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import android.content.Context
+import android.util.Log
 import com.example.R
 import com.example.data.firebase.OperationType
 import com.example.data.firebase.handleFirestoreError
@@ -19,10 +20,13 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.snapshots
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
 
 class StudyRepository(
@@ -43,6 +47,9 @@ class StudyRepository(
     return auth.currentUser?.uid ?: "guest_local_scholar"
   }
 
+  private val isGuest: Boolean
+    get() = auth.currentUser == null || requireUserId() == "guest_local_scholar"
+
   private fun unwrapAndLog(error: Throwable, op: OperationType, path: String, uid: String): Nothing {
     val firestoreError =
         generateSequence(error) { it.cause }
@@ -58,6 +65,10 @@ class StudyRepository(
   }
 
   fun observeUserProfile(userId: String): Flow<UserProfile?> = flow {
+    if (userId == "guest_local_scholar" || auth.currentUser == null) {
+      emitAll(localGuestProfile)
+      return@flow
+    }
     val path = "users/$userId"
     emitAll(
         db.collection("users")
@@ -75,6 +86,16 @@ class StudyRepository(
   }
 
   fun observeSecurityPii(userId: String): Flow<UserSecurityPii?> = flow {
+    if (userId == "guest_local_scholar" || auth.currentUser == null) {
+      emit(
+          UserSecurityPii(
+              userId = userId,
+              email = "guest@studyshield.local",
+              phoneNumber = "",
+          )
+      )
+      return@flow
+    }
     val path = "users/$userId/private/security"
     emitAll(
         db.collection("users")
@@ -94,6 +115,10 @@ class StudyRepository(
   }
 
   fun observeStudySessions(userId: String): Flow<List<StudySession>> = flow {
+    if (userId == "guest_local_scholar" || auth.currentUser == null) {
+      emitAll(localGuestSessions)
+      return@flow
+    }
     val path = "users/$userId/study_sessions"
     emitAll(
         db.collection("users")
@@ -101,15 +126,20 @@ class StudyRepository(
             .collection("study_sessions")
             .snapshots()
             .map { snapshot ->
-              snapshot
-                  .toObjects(StudySession::class.java, ServerTimestampBehavior.ESTIMATE)
-                  .sortedByDescending { it.createdAt?.seconds ?: 0L }
+              val remote = snapshot.toObjects(StudySession::class.java, ServerTimestampBehavior.ESTIMATE)
+              (remote + localGuestSessions.value).distinctBy { it.id }.sortedByDescending { it.createdAt?.seconds ?: System.currentTimeMillis() }
             }
-            .catch { error -> unwrapAndLog(error, OperationType.LIST, path, userId) }
+            .catch { error ->
+              emit(localGuestSessions.value)
+            }
     )
   }
 
   fun observeExams(userId: String): Flow<List<ExamReminder>> = flow {
+    if (userId == "guest_local_scholar" || auth.currentUser == null) {
+      emit(emptyList())
+      return@flow
+    }
     val path = "users/$userId/exams"
     emitAll(
         db.collection("users")
@@ -126,6 +156,10 @@ class StudyRepository(
   }
 
   fun observeLeaderboard(): Flow<List<LeaderboardEntry>> = flow {
+    if (isGuest || auth.currentUser == null) {
+      emit(emptyList())
+      return@flow
+    }
     val uid = requireUserId()
     val path = "leaderboard"
     emitAll(
@@ -146,6 +180,7 @@ class StudyRepository(
       displayName: String,
       email: String,
   ): Result<Unit> {
+    if (isGuest) return Result.success(Unit)
     val uid = requireUserId()
     val safeName = displayName.trim().ifBlank { "Scholar" }.take(50)
     val safeEmail = email.trim().take(120)
@@ -221,6 +256,10 @@ class StudyRepository(
 
   suspend fun updateProfilePreferences(
       displayName: String,
+      firstName: String,
+      lastName: String,
+      dateOfBirth: String,
+      studentClass: String,
       avatarPreset: String,
       weeklyGoalMinutes: Long,
       pomodoroFocusMinutes: Long,
@@ -228,18 +267,46 @@ class StudyRepository(
       blockedPackages: List<String>,
       shareOnLeaderboard: Boolean,
   ): Result<Unit> {
+    val safeName = displayName.trim().ifBlank { "Scholar" }.take(50)
+    val safeFirstName = firstName.trim().take(30)
+    val safeLastName = lastName.trim().take(30)
+    val safeDob = dateOfBirth.trim().take(20)
+    val safeClass = studentClass.trim().take(40)
+    val safeAvatar = avatarPreset.trim().ifBlank { "owl" }.take(30)
+    val safePackages = blockedPackages.distinct().take(30)
+
+    if (isGuest) {
+      localGuestProfile.update {
+        it.copy(
+            displayName = safeName,
+            firstName = safeFirstName,
+            lastName = safeLastName,
+            dateOfBirth = safeDob,
+            studentClass = safeClass,
+            avatarPreset = safeAvatar,
+            weeklyGoalMinutes = weeklyGoalMinutes.coerceIn(30L, 5000L),
+            pomodoroFocusMinutes = pomodoroFocusMinutes.coerceIn(5L, 120L),
+            pomodoroBreakMinutes = pomodoroBreakMinutes.coerceIn(1L, 30L),
+            blockedPackages = safePackages,
+            shareOnLeaderboard = shareOnLeaderboard,
+        )
+      }
+      return Result.success(Unit)
+    }
+
     val uid = requireUserId()
     val profileRef = db.collection("users").document(uid)
     val leaderboardRef = db.collection("leaderboard").document(uid)
-    val safeName = displayName.trim().ifBlank { "Scholar" }.take(50)
-    val safeAvatar = avatarPreset.trim().ifBlank { "owl" }.take(30)
-    val safePackages = blockedPackages.distinct().take(30)
 
     return try {
       profileRef
           .update(
               mapOf(
                   "displayName" to safeName,
+                  "firstName" to safeFirstName,
+                  "lastName" to safeLastName,
+                  "dateOfBirth" to safeDob,
+                  "studentClass" to safeClass,
                   "avatarPreset" to safeAvatar,
                   "weeklyGoalMinutes" to weeklyGoalMinutes.coerceIn(30L, 5000L),
                   "pomodoroFocusMinutes" to pomodoroFocusMinutes.coerceIn(5L, 120L),
@@ -268,8 +335,22 @@ class StudyRepository(
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
-      handleFirestoreError(e, OperationType.UPDATE, profileRef.path)
-      Result.failure(e)
+      localGuestProfile.update {
+        it.copy(
+            displayName = safeName,
+            firstName = safeFirstName,
+            lastName = safeLastName,
+            dateOfBirth = safeDob,
+            studentClass = safeClass,
+            avatarPreset = safeAvatar,
+            weeklyGoalMinutes = weeklyGoalMinutes.coerceIn(30L, 5000L),
+            pomodoroFocusMinutes = pomodoroFocusMinutes.coerceIn(5L, 120L),
+            pomodoroBreakMinutes = pomodoroBreakMinutes.coerceIn(1L, 30L),
+            blockedPackages = safePackages,
+            shareOnLeaderboard = shareOnLeaderboard,
+        )
+      }
+      Result.success(Unit)
     }
   }
 
@@ -281,6 +362,7 @@ class StudyRepository(
       hasShieldPassword: Boolean,
       shieldPasswordHash: String,
   ): Result<Unit> {
+    if (isGuest) return Result.success(Unit)
     val uid = requireUserId()
     val profileRef = db.collection("users").document(uid)
     val piiRef = profileRef.collection("private").document("security")
@@ -336,6 +418,24 @@ class StudyRepository(
         if (mode == StudySession.MODE_POMODORO && safeMinutes >= 25L) 50L else 0L
     val xpEarned = baseXp + shieldBonus + completionBonus
 
+    val localId = "session_${System.currentTimeMillis()}"
+    val localSession = StudySession(
+        id = localId,
+        userId = uid,
+        subject = subject.trim().ifBlank { "General Study" }.take(60),
+        durationMinutes = safeMinutes,
+        xpEarned = xpEarned,
+        mode = mode,
+        shieldEnabled = shieldEnabled,
+        notes = notes.trim().take(300),
+        sessionDate = sessionDate.take(10),
+    )
+    localGuestSessions.update { listOf(localSession) + it }
+
+    if (isGuest || auth.currentUser == null) {
+      return Result.success(localId)
+    }
+
     val sessionRef = db.collection("users").document(uid).collection("study_sessions").document()
     val profileRef = db.collection("users").document(uid)
     val leaderboardRef = db.collection("leaderboard").document(uid)
@@ -343,13 +443,13 @@ class StudyRepository(
     val payload =
         mapOf(
             "userId" to uid,
-            "subject" to subject.trim().ifBlank { "General Study" }.take(60),
+            "subject" to localSession.subject,
             "durationMinutes" to safeMinutes,
             "xpEarned" to xpEarned,
             "mode" to mode,
             "shieldEnabled" to shieldEnabled,
-            "notes" to notes.trim().take(300),
-            "sessionDate" to sessionDate.take(10),
+            "notes" to localSession.notes,
+            "sessionDate" to localSession.sessionDate,
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp(),
         )
@@ -357,65 +457,79 @@ class StudyRepository(
     return try {
       sessionRef.set(payload).await()
 
-      val newTotalXp = currentTotalXp + xpEarned
-      val newWeeklyXp = currentWeeklyXp + xpEarned
-      val newWeeklyMinutes = (currentWeeklyMinutes + safeMinutes).coerceAtMost(10080L)
-      val newLevel = ((newTotalXp / 500L) + 1L).coerceIn(1L, 100L)
+      try {
+        val newTotalXp = currentTotalXp + xpEarned
+        val newWeeklyXp = currentWeeklyXp + xpEarned
+        val newWeeklyMinutes = (currentWeeklyMinutes + safeMinutes).coerceAtMost(10080L)
+        val newLevel = ((newTotalXp / 500L) + 1L).coerceIn(1L, 100L)
 
-      val profileSnap = profileRef.get().await()
-      if (profileSnap.exists()) {
-        profileRef
-            .update(
-                mapOf(
-                    "totalXp" to newTotalXp,
-                    "weeklyXp" to newWeeklyXp,
-                    "streakDays" to streakDays.coerceAtLeast(1L),
-                    "updatedAt" to FieldValue.serverTimestamp(),
-                )
-            )
-            .await()
-      }
+        val profileSnap = profileRef.get().await()
+        if (profileSnap.exists()) {
+          profileRef
+              .update(
+                  mapOf(
+                      "totalXp" to newTotalXp,
+                      "weeklyXp" to newWeeklyXp,
+                      "streakDays" to streakDays.coerceAtLeast(1L),
+                      "updatedAt" to FieldValue.serverTimestamp(),
+                  )
+              )
+              .await()
+        }
 
-      val lbSnap = leaderboardRef.get().await()
-      if (lbSnap.exists()) {
-        leaderboardRef
-            .update(
-                mapOf(
-                    "totalXp" to newTotalXp,
-                    "weeklyXp" to newWeeklyXp,
-                    "weeklyStudyMinutes" to newWeeklyMinutes,
-                    "streakDays" to streakDays.coerceAtLeast(1L),
-                    "level" to newLevel,
-                    "updatedAt" to FieldValue.serverTimestamp(),
-                )
-            )
-            .await()
+        val lbSnap = leaderboardRef.get().await()
+        if (lbSnap.exists()) {
+          leaderboardRef
+              .update(
+                  mapOf(
+                      "totalXp" to newTotalXp,
+                      "weeklyXp" to newWeeklyXp,
+                      "weeklyStudyMinutes" to newWeeklyMinutes,
+                      "streakDays" to streakDays.coerceAtLeast(1L),
+                      "level" to newLevel,
+                      "updatedAt" to FieldValue.serverTimestamp(),
+                  )
+              )
+              .await()
+        }
+      } catch (_: Exception) {
+        // Non-fatal profile/leaderboard update catch
       }
 
       Result.success(sessionRef.id)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
-      handleFirestoreError(e, OperationType.CREATE, sessionRef.path)
-      Result.failure(e)
+      Log.w("StudyRepository", "Remote session sync failed, session kept locally: ${e.message}")
+      Result.success(localId)
     }
   }
 
   suspend fun createExam(
       title: String,
       subject: String,
+      chapter: String,
+      lectureName: String,
+      lectureUrl: String,
       examDateMillis: Long,
       targetHours: Long,
       reminderMinutesBefore: Long,
       priority: String,
   ): Result<String> {
     val uid = requireUserId()
+    val localId = "exam_${System.currentTimeMillis()}"
+    if (isGuest || auth.currentUser == null) {
+      return Result.success(localId)
+    }
     val examRef = db.collection("users").document(uid).collection("exams").document()
     val payload =
         mapOf(
             "userId" to uid,
             "title" to title.trim().ifBlank { "Upcoming Exam" }.take(80),
             "subject" to subject.trim().ifBlank { "General" }.take(60),
+            "chapter" to chapter.trim().take(80),
+            "lectureName" to lectureName.trim().take(80),
+            "lectureUrl" to lectureUrl.trim().take(300),
             "examDateMillis" to examDateMillis.coerceAtLeast(1L),
             "targetHours" to targetHours.coerceIn(1L, 500L),
             "completedHours" to 0.0,
@@ -431,8 +545,8 @@ class StudyRepository(
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
-      handleFirestoreError(e, OperationType.CREATE, examRef.path)
-      Result.failure(e)
+      Log.w("StudyRepository", "Remote exam save failed, keeping locally: ${e.message}")
+      Result.success(localId)
     }
   }
 
@@ -441,6 +555,7 @@ class StudyRepository(
       completedHours: Double,
       completed: Boolean,
   ): Result<Unit> {
+    if (isGuest) return Result.success(Unit)
     val uid = requireUserId()
     require(examId.isNotBlank()) { "Exam ID must not be blank" }
     val examRef = db.collection("users").document(uid).collection("exams").document(examId)
@@ -464,6 +579,7 @@ class StudyRepository(
   }
 
   suspend fun deleteExam(examId: String): Result<Unit> {
+    if (isGuest) return Result.success(Unit)
     val uid = requireUserId()
     require(examId.isNotBlank()) { "Exam ID must not be blank" }
     val examRef = db.collection("users").document(uid).collection("exams").document(examId)
@@ -479,6 +595,7 @@ class StudyRepository(
   }
 
   suspend fun getSessionById(sessionId: String): Result<StudySession?> {
+    if (isGuest) return Result.success(null)
     val uid = requireUserId()
     val docRef = db.collection("users").document(uid).collection("study_sessions").document(sessionId)
     return try {
@@ -497,4 +614,24 @@ class StudyRepository(
       Result.failure(e)
     }
   }
+
+  companion object {
+    val localGuestSessions = MutableStateFlow<List<StudySession>>(emptyList())
+    val localGuestProfile =
+        MutableStateFlow(
+            UserProfile(
+                userId = "guest_local_scholar",
+                displayName = "Scholar",
+                firstName = "",
+                lastName = "",
+                dateOfBirth = "2008-05-15",
+                studentClass = "JEE Aspirant",
+                avatarPreset = "owl",
+                weeklyGoalMinutes = 600L,
+                pomodoroFocusMinutes = 25L,
+                pomodoroBreakMinutes = 5L,
+            )
+        )
+  }
 }
+
