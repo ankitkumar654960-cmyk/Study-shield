@@ -72,6 +72,7 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.example.R
+import com.example.data.local.LocalPrefsStore
 import com.example.util.SecurityUtils
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
@@ -209,6 +210,7 @@ fun AuthScreen(
 ) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
+  val prefsStore = remember { LocalPrefsStore(context) }
   val credentialManager = remember { CredentialManager.create(context) }
   var isLoading by remember { mutableStateOf(false) }
   var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -575,6 +577,27 @@ fun AuthScreen(
               Text("Sign In with Email")
             }
           }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = {
+              scope.launch {
+                prefsStore.setGuestMode(true)
+                onAuthSuccess()
+              }
+            },
+            modifier = Modifier.fillMaxWidth().height(52.dp).testTag("guest_mode_button"),
+            shape = RoundedCornerShape(16.dp),
+            colors =
+                ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                ),
+        ) {
+          Icon(Icons.Filled.Shield, contentDescription = null, modifier = Modifier.size(20.dp))
+          Spacer(modifier = Modifier.width(10.dp))
+          Text("Skip Login & Continue as Guest", style = MaterialTheme.typography.labelLarge)
         }
 
         Spacer(modifier = Modifier.height(8.dp))

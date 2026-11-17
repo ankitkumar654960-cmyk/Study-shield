@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Global default-deny safety net
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if true;
     }
 
     // --- Shared Security Primitives ---

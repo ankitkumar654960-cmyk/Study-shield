@@ -141,6 +141,13 @@ class LocalPrefsStore(private val context: Context) {
     }
   }
 
+  val isGuestMode: Flow<Boolean> =
+      dataStore.data.map { prefs -> prefs[KEY_GUEST_MODE] ?: false }
+
+  suspend fun setGuestMode(guest: Boolean) {
+    dataStore.edit { prefs -> prefs[KEY_GUEST_MODE] = guest }
+  }
+
   private companion object {
     val KEY_THEME = stringPreferencesKey("theme_preference")
     val KEY_SHIELD_ACTIVE = booleanPreferencesKey("shield_active")
@@ -151,5 +158,6 @@ class LocalPrefsStore(private val context: Context) {
     val KEY_CACHED_UID = stringPreferencesKey("cached_uid")
     val KEY_LAST_BLOCKED_PKG = stringPreferencesKey("last_blocked_pkg")
     val KEY_2FA_VERIFIED_UID = stringPreferencesKey("two_factor_verified_uid")
+    val KEY_GUEST_MODE = booleanPreferencesKey("guest_mode")
   }
 }

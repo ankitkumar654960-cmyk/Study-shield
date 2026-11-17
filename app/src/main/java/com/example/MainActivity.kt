@@ -185,18 +185,23 @@ fun AppRoot(
     return
   }
 
+  val prefsStore = remember(context) { LocalPrefsStore(context) }
+  val isGuest by prefsStore.isGuestMode.collectAsStateWithLifecycle(initialValue = false)
   val auth = remember { Firebase.auth }
   val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
   val user = currentUser
 
-  if (user == null) {
+  if (user == null && !isGuest) {
     AuthScreen(onAuthSuccess = {})
   } else {
-    key(user.uid) {
+    val uid = user?.uid ?: "guest_local_scholar"
+    val email = user?.email ?: "guest@studyshield.local"
+    val name = user?.displayName ?: "Study Scholar"
+    key(uid) {
       AuthenticatedStudyApp(
-          currentUserId = user.uid,
-          userEmail = user.email ?: "",
-          userDisplayName = user.displayName ?: "Scholar",
+          currentUserId = uid,
+          userEmail = email,
+          userDisplayName = name,
           blockedAppFromIntent = blockedAppFromIntent,
           onClearBlockedIntent = onClearBlockedIntent,
       )
